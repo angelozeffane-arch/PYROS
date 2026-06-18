@@ -1753,7 +1753,8 @@ var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI
 var SB_TABLE='app_state';
 var SB_ID='main';
 var sbTimer=null, sbRemoteStamp=null, sbDirty=false, sbInited=false;
-function sbHeaders(extra){var h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};if(extra){for(var k in extra)h[k]=extra[k];}return h;}
+function sbGetToken(){try{var s=JSON.parse(localStorage.getItem('mep_sb_auth')||'null');if(s&&s.access_token&&s.expires_at>Date.now()/1000+30)return s.access_token;}catch(e){}return null;}
+function sbHeaders(extra){var tok=sbGetToken()||SB_KEY;var h={'apikey':SB_KEY,'Authorization':'Bearer '+tok};if(extra){for(var k in extra)h[k]=extra[k];}return h;}
 function sbStatus(s){var el=document.getElementById('sbStatus');if(el)el.textContent=s;}
 function collectAll(){return {menu:menu,state:state,timers:(typeof timers!=='undefined'?timers:[]),alarms:(typeof alarms!=='undefined'?alarms:[]),dlc:DLC_ITEMS,hyg:HYG_ITEMS};}
 function applyAll(d){
@@ -4824,12 +4825,22 @@ function renderAllergenStrip(container){
 
 function renderMetierSection(container,tabId){
   var info=METIER_INFO[tabId]||{label:'Section',emoji:'📁'};
+  var customLabel=(state.cardLabels&&state.cardLabels[tabId])||info.label;
+  var customEmoji=(state.cardEmojis&&state.cardEmojis[tabId])||info.emoji;
   var hdr=document.createElement('div');hdr.className='section-header';
-  hdr.innerHTML='<span class="section-label">'+info.emoji+' '+info.label+'</span>';
-  container.appendChild(hdr);
+  var lbl=document.createElement('span');lbl.className='section-label';lbl.textContent=customEmoji+' '+customLabel;
+  hdr.appendChild(lbl);container.appendChild(hdr);
+  if(editMode){
+    var editRow=document.createElement('div');editRow.style.cssText='display:flex;gap:6px;margin-top:6px;margin-bottom:2px;';
+    var ren=document.createElement('button');ren.type='button';ren.className='sec-reset';ren.textContent='✎ Renommer';
+    ren.onclick=function(){uiPrompt('Nouveau nom :',function(v){if(!v||!v.trim())return;if(!state.cardLabels)state.cardLabels={};state.cardLabels[tabId]=v.trim();save();renderAll();},customLabel);};
+    var emoBtn=document.createElement('button');emoBtn.type='button';emoBtn.className='sec-reset';emoBtn.textContent='😀 Emoji';
+    emoBtn.onclick=function(){openEmojiPicker(function(e){if(!state.cardEmojis)state.cardEmojis={};state.cardEmojis[tabId]=e;save();renderAll();});};
+    editRow.appendChild(ren);editRow.appendChild(emoBtn);container.appendChild(editRow);
+  }
   renderAllergenStrip(container);
-  renderSectionProducts(container,tabId,info.label);
-  renderModuleContent(container,tabId,info.label);
+  renderSectionProducts(container,tabId,customLabel);
+  renderModuleContent(container,tabId,customLabel);
 }
 
 function renderCuisineSection(container){
@@ -4870,14 +4881,23 @@ function renderCustomSection(container,tabId){
   var hdr=document.createElement('div');hdr.className='section-header';
   hdr.innerHTML='<span class="section-label">'+(cs.emoji||'📁')+' '+cs.label+'</span>';
   container.appendChild(hdr);
+  if(editMode){
+    var editRow=document.createElement('div');editRow.style.cssText='display:flex;gap:6px;margin-top:6px;margin-bottom:2px;';
+    var ren=document.createElement('button');ren.type='button';ren.className='sec-reset';ren.textContent='✎ Renommer';
+    ren.onclick=function(){uiPrompt('Nouveau nom :',function(v){if(!v||!v.trim())return;cs.label=v.trim();save();renderAll();},cs.label);};
+    var emoBtn=document.createElement('button');emoBtn.type='button';emoBtn.className='sec-reset';emoBtn.textContent='😀 Emoji';
+    emoBtn.onclick=function(){openEmojiPicker(function(e){cs.emoji=e;save();renderAll();});};
+    editRow.appendChild(ren);editRow.appendChild(emoBtn);container.appendChild(editRow);
+  }
   renderAllergenStrip(container);
   renderSectionProducts(container,tabId,cs.label);
   renderModuleContent(container,tabId,cs.label);
-  // Bouton supprimer
-  var del=document.createElement('button');del.className='sec-reset';del.style.marginTop='20px';
-  del.innerHTML='🗑 Supprimer cette section';
-  del.onclick=function(){uiConfirm('Supprimer la section « '+cs.label+' » ?',function(){state.customSections=state.customSections.filter(function(s){return s.id!==tabId;});save();goHome();});};
-  container.appendChild(del);
+  if(editMode){
+    var del=document.createElement('button');del.className='sec-reset';del.style.cssText='margin-top:20px;color:#dc2626;';
+    del.innerHTML='🗑 Supprimer cette section';
+    del.onclick=function(){uiConfirm('Supprimer la section « '+cs.label+' » ?',function(){state.customSections=state.customSections.filter(function(s){return s.id!==tabId;});save();goHome();});};
+    container.appendChild(del);
+  }
 }
 
 /* ===== CRÉER UNE SECTION CUSTOM ===== */
@@ -5535,9 +5555,76 @@ function runComparateur(productName,log,btn){
   log.textContent='🔍 Lancement de la comparaison pour : '+productName+'\n\n';setTimeout(step,400);
 }
 function renderAgentTab(content,productName){
-  var box=document.createElement('div');box.style.cssText='text-align:center;padding:24px 16px;';
-  box.innerHTML='<div style="font-size:42px;margin-bottom:12px;">🤖</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">Agent comparateur autonome</div><div style="font-size:12px;color:var(--text3);line-height:1.6;">Le vrai agent qui compare automatiquement les prix, frais de port et délais en temps réel sera ajouté ici via <b>Claude Code</b> (nécessite un backend pour interroger les sites).<br><br>Pour l\u2019instant, utilise l\u2019onglet <b>Comparer</b> qui ouvre tous les sites en 1 clic.</div>';
-  content.appendChild(box);
+  if(!state.priceComps)state.priceComps={};
+  var key=((productName||'').toLowerCase().trim())||'_global';
+  if(!state.priceComps[key])state.priceComps[key]=[];
+  var entries=state.priceComps[key];
+  var wrap=document.createElement('div');wrap.style.cssText='padding:12px 0;';
+  var title=document.createElement('div');title.style.cssText='font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;';
+  title.textContent='📋 Comparateur de prix'+(productName?' — '+productName:'');
+  wrap.appendChild(title);
+  var sub=document.createElement('div');sub.style.cssText='font-size:11px;color:var(--text3);margin-bottom:12px;';
+  sub.textContent='Note les prix trouvés sur les sites. ✅ = meilleur prix.';
+  wrap.appendChild(sub);
+  var addBtn=document.createElement('button');addBtn.type='button';
+  addBtn.style.cssText='background:var(--orange);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;width:100%;margin-bottom:10px;';
+  addBtn.textContent='+ Ajouter un prix';
+  wrap.appendChild(addBtn);
+  function buildTable(){
+    var old=wrap.querySelector('.pc-tbl');if(old)old.remove();
+    if(!entries.length){
+      var mt=document.createElement('div');mt.className='pc-tbl';mt.style.cssText='font-size:12px;color:var(--text3);padding:8px 0;text-align:center;';
+      mt.textContent='Aucun prix enregistré.';wrap.appendChild(mt);return;
+    }
+    var sorted=entries.slice().sort(function(a,b){return(parseFloat(a.price)||9999)-(parseFloat(b.price)||9999);});
+    var best=parseFloat(sorted[0].price);
+    var tbl=document.createElement('div');tbl.className='pc-tbl';
+    tbl.style.cssText='border:0.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px;';
+    sorted.forEach(function(e,i){
+      var ok=parseFloat(e.price)===best;
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:8px;padding:9px 10px;font-size:12px;background:'+(i%2===0?'var(--card)':'rgba(0,0,0,0.02)')+';border-left:3px solid '+(ok?'#16a34a':'transparent')+';';
+      var bk=document.createElement('div');bk.style.cssText='font-size:14px;width:18px;text-align:center;flex-shrink:0;';bk.textContent=ok?'✅':'';
+      var mc=document.createElement('div');mc.style.cssText='flex:1;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';mc.textContent=e.merchant||'?';
+      var pc=document.createElement('div');pc.style.cssText='font-weight:700;color:'+(ok?'#16a34a':'var(--text)')+';white-space:nowrap;flex-shrink:0;';
+      pc.textContent=(parseFloat(e.price)||0).toFixed(2)+'€'+(e.unit?' / '+e.unit:'');
+      var dc=document.createElement('div');dc.style.cssText='font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;';dc.textContent=e.date||'';
+      var dl=document.createElement('button');dl.type='button';dl.style.cssText='background:none;border:none;font-size:16px;cursor:pointer;padding:0 2px;color:#dc2626;flex-shrink:0;line-height:1;';dl.textContent='×';
+      dl.onclick=function(){state.priceComps[key]=state.priceComps[key].filter(function(x){return x.id!==e.id;});save();buildTable();};
+      row.appendChild(bk);row.appendChild(mc);row.appendChild(pc);row.appendChild(dc);row.appendChild(dl);tbl.appendChild(row);
+    });
+    wrap.appendChild(tbl);
+    var nt=document.createElement('div');nt.style.cssText='font-size:10px;color:var(--text3);text-align:center;';
+    nt.textContent=entries.length+' entrée'+(entries.length>1?'s':'')+' — '+(productName||'global');
+    wrap.appendChild(nt);
+  }
+  addBtn.onclick=function(){
+    var fx=wrap.querySelector('.pc-form');if(fx){fx.remove();return;}
+    var form=document.createElement('div');form.className='pc-form';
+    form.style.cssText='background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;';
+    function inp(ph,tp){var i=document.createElement('input');i.placeholder=ph;i.type=tp||'text';i.style.cssText='padding:8px;border:0.5px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg);color:var(--text);width:100%;box-sizing:border-box;';return i;}
+    var iM=inp('Marchand (ex: Metro, Rungis, Amazon...)');
+    var iP=inp('Prix TTC en € (ex: 4.50)','number');iP.step='0.01';iP.min='0';
+    var iU=inp('Unité (ex: kg, L, pièce)');
+    var iN=inp('Note (optionnel)');
+    var today=new Date();var p2=function(n){return(n<10?'0':'')+n;};
+    var ds=today.getFullYear()+'-'+p2(today.getMonth()+1)+'-'+p2(today.getDate());
+    var row=document.createElement('div');row.style.cssText='display:flex;gap:8px;';
+    var sv=document.createElement('button');sv.type='button';sv.style.cssText='flex:1;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;';sv.textContent='✓ Enregistrer';
+    var cn=document.createElement('button');cn.type='button';cn.style.cssText='background:var(--border);color:var(--text);border:none;border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;';cn.textContent='Annuler';
+    sv.onclick=function(){
+      var m=(iM.value||'').trim();var p=(iP.value||'').trim();
+      if(!m||!p){iM.style.outline='2px solid #dc2626';iP.style.outline='2px solid #dc2626';return;}
+      entries.push({id:'pc_'+Date.now(),merchant:m,price:p,unit:(iU.value||'').trim(),date:ds,note:(iN.value||'').trim()});
+      save();form.remove();buildTable();
+    };
+    cn.onclick=function(){form.remove();};
+    row.appendChild(sv);row.appendChild(cn);
+    form.appendChild(iM);form.appendChild(iP);form.appendChild(iU);form.appendChild(iN);form.appendChild(row);
+    wrap.insertBefore(form,addBtn.nextSibling);
+  };
+  buildTable();
+  content.appendChild(wrap);
 }
 
 
@@ -6089,18 +6176,63 @@ function renderBebe(c){
 }
 
 var ACCESS_CODE='giorgionolinominusbrutus';
-function accessOK(){try{return localStorage.getItem('mep_access')==='ok';}catch(e){return true;}}
+function accessOK(){
+  try{
+    var s=JSON.parse(localStorage.getItem('mep_sb_auth')||'null');
+    if(s&&s.access_token&&s.expires_at>Date.now()/1000+30)return true;
+    return localStorage.getItem('mep_access')==='ok';
+  }catch(e){return true;}
+}
+function sbAuthSignIn(email,password,onOk,onErr){
+  fetch(SB_URL+'/auth/v1/token?grant_type=password',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({email:email,password:password})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.access_token){
+      try{localStorage.setItem('mep_sb_auth',JSON.stringify(d));localStorage.setItem('mep_access','ok');}catch(e){}
+      onOk(d);
+    } else {
+      onErr(d.error_description||d.msg||'Identifiants incorrects');
+    }
+  }).catch(function(){onErr('Hors-ligne ou erreur réseau');});
+}
+function sbAuthSignOut(){
+  try{localStorage.removeItem('mep_sb_auth');localStorage.removeItem('mep_access');}catch(e){}
+  location.reload();
+}
 function showGate(){
   var ov=document.createElement('div');ov.className='gate-ov';
   var box=document.createElement('div');box.className='gate-box';
-  box.innerHTML='<div class="gate-title">PYROS</div><div class="gate-sub">Angelo Zeffane</div><div class="gate-msg">Entre le code d’accès</div>';
-  var inp=document.createElement('input');inp.type='password';inp.className='gate-input';inp.placeholder='Code';inp.autocomplete='off';
-  var btn=document.createElement('button');btn.type='button';btn.className='gate-btn';btn.textContent='Entrer';
+  box.innerHTML='<div class="gate-title">PYROS</div><div class="gate-sub">Angelo Zeffane</div>';
+  var tabs=document.createElement('div');tabs.style.cssText='display:flex;gap:4px;margin-bottom:14px;';
+  var tEmail=document.createElement('button');tEmail.type='button';tEmail.className='gate-btn';tEmail.style.cssText='flex:1;font-size:11px;padding:6px;';tEmail.textContent='🔒 Compte';
+  var tCode=document.createElement('button');tCode.type='button';tCode.className='gate-btn';tCode.style.cssText='flex:1;font-size:11px;padding:6px;opacity:.55;background:rgba(0,0,0,.08);color:var(--text);';tCode.textContent='🔑 Code';
+  tabs.appendChild(tEmail);tabs.appendChild(tCode);box.appendChild(tabs);
+  var vEmail=document.createElement('div');
+  var emailInp=document.createElement('input');emailInp.type='email';emailInp.className='gate-input';emailInp.placeholder='Email';emailInp.autocomplete='email';
+  var passInp=document.createElement('input');passInp.type='password';passInp.className='gate-input';passInp.placeholder='Mot de passe';passInp.autocomplete='current-password';passInp.style.marginTop='8px';
+  var loginBtn=document.createElement('button');loginBtn.type='button';loginBtn.className='gate-btn';loginBtn.textContent='Connexion';
+  vEmail.appendChild(emailInp);vEmail.appendChild(passInp);vEmail.appendChild(loginBtn);
+  var vCode=document.createElement('div');vCode.style.display='none';
+  var codeInp=document.createElement('input');codeInp.type='password';codeInp.className='gate-input';codeInp.placeholder='Code d’accès';codeInp.autocomplete='off';
+  var codeBtn=document.createElement('button');codeBtn.type='button';codeBtn.className='gate-btn';codeBtn.textContent='Entrer';
+  vCode.appendChild(codeInp);vCode.appendChild(codeBtn);
   var err=document.createElement('div');err.className='gate-err';
-  function tryCode(){if((inp.value||'').trim().toLowerCase()===ACCESS_CODE.toLowerCase()){try{localStorage.setItem('mep_access','ok');}catch(e){}try{document.body.removeChild(ov);}catch(e){}bootApp();}else{err.textContent='Code incorrect';inp.value='';try{inp.focus();}catch(e){}}}
-  btn.onclick=tryCode;inp.addEventListener('keydown',function(e){if(e.key==='Enter')tryCode();});
-  box.appendChild(inp);box.appendChild(btn);box.appendChild(err);ov.appendChild(box);document.body.appendChild(ov);
-  setTimeout(function(){try{inp.focus();}catch(e){}},80);
+  box.appendChild(vEmail);box.appendChild(vCode);box.appendChild(err);
+  tEmail.onclick=function(){vEmail.style.display='';vCode.style.display='none';tEmail.style.opacity='1';tEmail.style.background='';tCode.style.opacity='.55';tCode.style.background='rgba(0,0,0,.08)';};
+  tCode.onclick=function(){vCode.style.display='';vEmail.style.display='none';tCode.style.opacity='1';tCode.style.background='';tEmail.style.opacity='.55';tEmail.style.background='rgba(0,0,0,.08)';setTimeout(function(){try{codeInp.focus();}catch(e){}},50);};
+  function doLogin(){
+    var email=(emailInp.value||'').trim();var pass=(passInp.value||'').trim();
+    if(!email||!pass){err.textContent='Email et mot de passe requis';return;}
+    loginBtn.textContent='...';err.textContent='';
+    sbAuthSignIn(email,pass,function(){try{document.body.removeChild(ov);}catch(e){}bootApp();},function(msg){err.textContent=msg;loginBtn.textContent='Connexion';});
+  }
+  loginBtn.onclick=doLogin;passInp.addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+  function doCode(){if((codeInp.value||'').trim().toLowerCase()===ACCESS_CODE.toLowerCase()){try{localStorage.setItem('mep_access','ok');}catch(e){}try{document.body.removeChild(ov);}catch(e){}bootApp();}else{err.textContent='Code incorrect';codeInp.value='';try{codeInp.focus();}catch(e){}}}
+  codeBtn.onclick=doCode;codeInp.addEventListener('keydown',function(e){if(e.key==='Enter')doCode();});
+  ov.appendChild(box);document.body.appendChild(ov);
+  setTimeout(function(){try{emailInp.focus();}catch(e){}},80);
 }
 function bootApp(){
 load();
