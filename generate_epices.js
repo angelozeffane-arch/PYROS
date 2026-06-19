@@ -252,13 +252,14 @@ data.categories.forEach(cat => {
   });
 });
 
-console.log('Unique entries:', seen.size);
+// Sort alphabetically by nom
+const entries = Array.from(seen.values()).sort((a,b) => a.nom.localeCompare(b.nom, 'fr'));
+console.log('Unique entries:', entries.length);
 
 // ── generate EPICE_FAM block ──────────────────────────────────────────────────
 const FAM_BLOCK = `var EPICE_FAM=[['epice','Épice'],['herbe','Herbe'],['aromate','Aromate'],['melange','Mélange'],['umami','Champignon/umami'],['sel','Sel & fumée'],['graine','Graine'],['rare','Rare / méconnu']];`;
 
 // ── generate EPICE_REF block ──────────────────────────────────────────────────
-const entries = Array.from(seen.values());
 
 function fld(k, v) {
   if (!v) return '';
