@@ -2332,6 +2332,18 @@ var MAT_REF=[
 {nom:'Cercles & cadres inox réglables',cat:'moule',usage:'Monter, cuire et détailler.',marque:'de Buyer, Matfer, Patisse',exemple:'Cadre pour le montage d’un opéra.',domaine:'Pâtisserie'}
 ];
 
+function refPhotoUI(container,prefix,name){
+  if(!state.refPhotos)state.refPhotos={};
+  var key=prefix+'__'+name;
+  var saved=state.refPhotos[key]||'';
+  var wrap=document.createElement('div');wrap.style.marginTop='8px';
+  if(saved){var img=document.createElement('img');img.src=saved;img.style.cssText='max-width:100%;border-radius:6px;display:block;margin-bottom:4px;';wrap.appendChild(img);}
+  var btn=document.createElement('button');btn.type='button';btn.className='sec-reset';btn.style.cssText='color:var(--text2);border-color:var(--text2);font-size:12px;';btn.textContent=saved?'🖼 Modifier photo':'📷 Photo';
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.style.display='none';
+  btn.onclick=function(){inp.click();};
+  inp.onchange=function(){var f=inp.files&&inp.files[0];if(!f)return;resizeImage(f,function(data){if(data){state.refPhotos[key]=data;save();RERENDER();}});};
+  wrap.appendChild(btn);wrap.appendChild(inp);container.appendChild(wrap);
+}
 var matFilter='', matSearch='';
 function renderMateriel(container){
   if(!state.materiel)state.materiel=[];
